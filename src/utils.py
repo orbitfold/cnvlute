@@ -18,3 +18,12 @@ def load_files(filename):
     return data
 
     
+def downsample(wave, n):
+    """
+    wave - numpy array
+    """
+    # Brickwall filter to reduce aliasing.
+    wave_fft = np.fft.fft(wave)
+    wave_fft = wave_fft[0:(wave_fft.shape[0] / n)]
+    wave = np.fft.ifft(wave_fft)
+    return wave[::n]
