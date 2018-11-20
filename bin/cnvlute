@@ -1,6 +1,41 @@
 #!/usr/bin/env python
 
-import cnvlute
+import cnvlute.utils
+import cnvlute.neural
+import argparse
+import sounddevice as sd
+import pickle
+import numpy as np
 
 if __name__ == '__main__':
-    pass
+    parser = argparse.ArgumentParser()
+    parser.add_argument("command", help="which cnvlute subprogram to run")
+    parser.add_argument("--infile1")
+    parser.add_argument("--infile2")
+    parser.add_argument("-o", "--outfile")
+    parser.add_argument("--downsample", type=int)
+    parser.add_argument("--max_len", type=int)
+    parser.add_argument("--hidden_neurons", type=int)
+    parser.add_argument("--preview", action='store_true')
+    args = parser.parse_args()
+    if args.command == "build_model":
+        data, srate = cnvlute.utils.load_files(args.infile1)
+        data = [cnvlute.utils.downsample(wave, int(args.downsample)) for wave in data]
+        cnvlute.utils.pad_data(data, int(args.max_len))
+        model = cnvlute.neural.Model(int(args.hidden_neurons), int(args.max_len), srate, int(args.downsample))
+        model.train(data)
+        if args.preview:
+            for wave in model.predict(data):
+                sd.play(wave, srate / int(args.downsample))
+                sd.wait()
+        model.store(args.outfile)
+    elif args.command == "apply_model":
+        with open(args.infile2, 'rb') as fd:
+            model = pickle.load(fd)
+        data, srate = cnvlute.utils.load_files(args.infile1)
+        data = [cnvlute.utils.downsample(wave, int(srate / float(model.sampling_rate))) for wave in data]
+        cnvlute.utils.pad_data(data, int(model.n_output))
+        data = np.array(data)
+        for wave in model.predict(data):
+            sd.play(wave, model.sampling_rate)
+            sd.wait()
