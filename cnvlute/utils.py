@@ -3,6 +3,13 @@ import scipy.io.wavfile as wav
 from scipy.fftpack import fft, ifft
 
 
+def equalize_size(wav1, wav2):
+    if wav1.shape[0] > wav2.shape[0]:
+        return wav1, pad_data(wav2, wav1.shape[0])
+    else:
+        return pad_data(wav1, wav2.shape[0]), wav2
+
+
 def pad_data(data, max_len):
     for index, wave in enumerate(data):
         if wave.shape[0] > max_len:

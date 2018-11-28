@@ -64,9 +64,11 @@ def fmpartial(x, samples, sampling_rate):
 
 def fm_fitness(x, wave, sampling_rate):
     guess = fmpartial(x, len(wave), sampling_rate)
+    wave = fft.fft(wave)
+    guess = fft.fft(guess)
     diff = wave - guess
     diff = np.sqrt((diff * diff).sum())
-    return diff
+    return np.absolute(diff)
 
 
 def linenv(samples, values):

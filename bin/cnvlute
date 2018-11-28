@@ -6,6 +6,55 @@ import argparse
 import sounddevice as sd
 import pickle
 import numpy as np
+import scipy.io.wavfile as wav
+
+
+def convolute(args):
+    in1 = args.infile1
+    in2 = args.infile2
+    out = args.outfile
+    srate, wav1 = wav.read(in1)
+    wav2 = wav.read(in2)[1]
+    wav1 /= float(np.absolute(wav1).max())
+    wav2 /= float(np.absolute(wav2).max())
+    wav1, wav2 = cnvlute.utils.equalize_size(wav1, wav2)
+    wav1 = np.fft.fft(wav1)
+    wav2 = np.fft.fft(wav2)
+    convolved = np.absolute(np.fft.ifft(wav1 * wav2))
+    if args.preview:
+        sd.play(convolved, srate)
+    else:
+        wav.write(out, srate, out)
+
+
+def granular_resynthesis(args):
+    window_size = 1024
+    in1 = args.infile1
+    in2 = args.infile2
+    out = args.outfile
+    srate, wav1 = wav.read(in1)
+    wav2 = wav.read(in2)[1]
+    wav1 = wav1 / float(np.absolute(wav1).max())
+    wav2 = wav2 / float(np.absolute(wav2).max())
+    wav1 = np.pad(wav1, (0, window_size - wav1.shape[0] % window_size), 'constant')
+    wav2 = np.pad(wav2, (0, window_size - wav2.shape[0] % window_size), 'constant')
+    wav1 = wav1.reshape((int(wav1.shape[0] / window_size), window_size))
+    wav2 = wav2.reshape((int(wav2.shape[0] / window_size), window_size))
+    wav1_tiled = wav1.repeat(len(wav2), 0)
+    wav2_tiled = np.tile(wav2, (len(wav1), 1))
+    distance = np.sqrt(((wav1_tiled - wav2_tiled) ** 2).sum(1)).reshape((len(wav2), len(wav1)))
+    res = wav2[np.argmin(distance, 0)].reshape(window_size * len(wav1))
+    if args.preview:
+        sd.play(res, srate)
+    else:
+        wav.write(out, srate, res)
+
+
+COMMANDS = {
+    'convolute' : convolute,
+    'granular_resynthesis' : granular_resynthesis
+}
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -18,24 +67,25 @@ if __name__ == '__main__':
     parser.add_argument("--hidden_neurons", type=int)
     parser.add_argument("--preview", action='store_true')
     args = parser.parse_args()
-    if args.command == "build_model":
-        data, srate = cnvlute.utils.load_files(args.infile1)
-        data = [cnvlute.utils.downsample(wave, int(args.downsample)) for wave in data]
-        cnvlute.utils.pad_data(data, int(args.max_len))
-        model = cnvlute.neural.Model(int(args.hidden_neurons), int(args.max_len), srate, int(args.downsample))
-        model.train(data)
-        if args.preview:
-            for wave in model.predict(data):
-                sd.play(wave, srate / int(args.downsample))
-                sd.wait()
-        model.store(args.outfile)
-    elif args.command == "apply_model":
-        with open(args.infile2, 'rb') as fd:
-            model = pickle.load(fd)
-        data, srate = cnvlute.utils.load_files(args.infile1)
-        data = [cnvlute.utils.downsample(wave, int(srate / float(model.sampling_rate))) for wave in data]
-        cnvlute.utils.pad_data(data, int(model.n_output))
-        data = np.array(data)
-        for wave in model.predict(data):
-            sd.play(wave, model.sampling_rate)
-            sd.wait()
+    COMMANDS[args.command](args)
+    # if args.command == "build_model":
+    #     data, srate = cnvlute.utils.load_files(args.infile1)
+    #     data = [cnvlute.utils.downsample(wave, int(args.downsample)) for wave in data]
+    #     cnvlute.utils.pad_data(data, int(args.max_len))
+    #     model = cnvlute.neural.Model(int(args.hidden_neurons), int(args.max_len), srate, int(args.downsample))
+    #     model.train(data)
+    #     if args.preview:
+    #         for wave in model.predict(data):
+    #             sd.play(wave, srate / int(args.downsample))
+    #             sd.wait()
+    #     model.store(args.outfile)
+    # elif args.command == "apply_model":
+    #     with open(args.infile2, 'rb') as fd:
+    #         model = pickle.load(fd)
+    #     data, srate = cnvlute.utils.load_files(args.infile1)
+    #     data = [cnvlute.utils.downsample(wave, int(srate / float(model.sampling_rate))) for wave in data]
+    #     cnvlute.utils.pad_data(data, int(model.n_output))
+    #     data = np.array(data)
+    #     for wave in model.predict(data):
+    #         sd.play(wave, model.sampling_rate)
+    #         sd.wait()
